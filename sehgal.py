@@ -6,6 +6,33 @@ pl.ion()
 datadir = 'data/'
 nside = 8192
 
+def make_ksz_cutouts_for_sptsz_like_catalog():
+    d = load_sptsz_like_catalog()
+    ksz = load_ksz_uk_cmb()
+    cutouts = make_cutouts_from_catalog(d, ksz)
+    # write to fits
+    from astropy.io import fits
+    hdus = [fits.PrimaryHDU(cutouts), fits.ImageHDU(d['z']), fits.ImageHDU(d['m500c'])]
+    hdulist = fits.HDUList(hdus)
+    hdulist.writeto('sehgal_ksz_cutouts_for_sptsz_like_catalog.fits')
+
+    
+def make_cutouts_from_catalog(catalog, hpix_map, reso_arcmin=0.5, nside=61):
+    add_healpix_coordinates(catalog)
+    import healpy as hp
+    lon_deg = catalog['ra']
+    lat_deg = catalog['dec']
+    ncl = len(catalog['ra'])
+    cutouts = np.zeros((ncl, nside, nside))
+    for i, lon, lat in zip(range(ncl), lon_deg, lat_deg):
+        print '%i/%i'%(i,ncl)
+        pl.clf()
+        cutout = hp.gnomview(hpix_map, rot=(lon, lat, 0), fig=1,
+                             reso=reso_arcmin, xsize=nside, ysize=nside,
+                             return_projected_map=True)
+        cutouts[i, :, :] = cutout
+    return cutouts
+
 
 def measure_ksz_rms_at_sptsz_like_clusters():
     measure_ksz_rms_for_catalog(load_sptsz_like_catalog())
@@ -16,19 +43,24 @@ def measure_ksz_rms_at_ssdf_like_clusters():
 
     
 def measure_ksz_rms_for_catalog(d):
-    from astropy.io import fits
-    tmp = fits.open(datadir+'219_ksz_healpix.fits')[1].data['signal']
-    ksz_uk = tmp*jy_per_steradian_to_k_cmb(219)*1e6
     add_healpix_coordinates(d)
+    ksz_uk = laod_ksz_uk_cmb()
     rms = ksz_uk[d['ind_hpix']].std()
     print 'RMS is %0.1f uK-CMB'%(rms)
 
-
+def load_ksz_uk_cmb():
+    from astropy.io import fits
+    tmp = fits.open(datadir+'219_ksz_healpix.fits')[1].data['signal']
+    ksz_uk = tmp*jy_per_steradian_to_k_cmb(219)*1e6
+    return ksz_uk
+    
 def add_healpix_coordinates(d):
     import healpy as hp
     phi = d['ra']*np.pi/180.
     theta = (90.-d['dec'])*np.pi/180.
     d['ind_hpix'] = hp.ang2pix(nside, theta, phi, nest=False)
+    d['phi'] = phi
+    d['theta'] = theta    
 
     
 def load_sptsz_like_catalog():
